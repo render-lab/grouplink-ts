@@ -306,12 +306,23 @@ ${ICON_MASKS}
  * A favicon that 404s leaves a broken-image glyph, and no CSS selector matches a
  * failed image. `error` does not bubble, so the listener runs in the capture phase.
  * It adds a class instead of writing el.style, which the policy would have to allow.
+ *
+ * An email card links to mailto:, which opens the mail app on a phone. A desktop
+ * often has no mail app, so a mouse or trackpad swaps in Gmail's compose page.
  */
-export const ICON_FALLBACK_SCRIPT = `
+export const PAGE_SCRIPT = `
 addEventListener('error', function (event) {
   var el = event.target;
   if (el instanceof HTMLImageElement && el.classList.contains('card__icon')) {
     el.classList.add('card__icon--broken');
   }
 }, true);
+
+if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+  document.querySelectorAll('a[data-gmail]').forEach(function (a) {
+    a.href = a.dataset.gmail;
+    a.target = '_blank';
+    a.rel = 'noopener';
+  });
+}
 `;

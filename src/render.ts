@@ -4,13 +4,13 @@
 //
 // The page carries its own Content-Security-Policy, with the inline style and
 // script blocks allowed by hash. Adding either one anywhere but STYLES or
-// ICON_FALLBACK_SCRIPT will be blocked by the browser. The policy is a meta tag
+// PAGE_SCRIPT will be blocked by the browser. The policy is a meta tag
 // rather than a response header so the hashes cannot drift from the content
 // they cover.
 import { createHash } from "node:crypto";
 import type { IconName } from "./icons.js";
-import { ICON_FALLBACK_SCRIPT, STYLES } from "./styles.js";
-import { isMailtoUrl, normalizeMailto } from "./url.js";
+import { PAGE_SCRIPT, STYLES } from "./styles.js";
+import { gmailComposeUrl, isMailtoUrl, normalizeMailto } from "./url.js";
 
 export interface LinkCard {
   /** Display text. Comes from Notion, not from the scrape. */
@@ -73,7 +73,7 @@ const CSP = [
   // link points at, over TLS only.
   "img-src 'self' https:",
   `style-src ${sha256Source(STYLES)}`,
-  `script-src ${sha256Source(ICON_FALLBACK_SCRIPT)}`,
+  `script-src ${sha256Source(PAGE_SCRIPT)}`,
   "font-src 'self'",
   "base-uri 'none'",
   "form-action 'none'",
@@ -110,6 +110,10 @@ function truncate(target: string): string {
 
 function renderCard(card: LinkCard): string {
   const href = escapeHtml(safeUrl(card.url));
+  // PAGE_SCRIPT swaps this in for the mailto: href on a desktop.
+  const gmail = isMailtoUrl(card.url)
+    ? ` data-gmail="${escapeHtml(gmailComposeUrl(card.url))}"`
+    : "";
   const title = escapeHtml(card.title);
   const desc = card.description
     ? `<span class="card__desc">${escapeHtml(card.description)}</span>`
@@ -121,7 +125,7 @@ function renderCard(card: LinkCard): string {
   const meta = target
     ? `<span class="card__meta">${favicon}<span class="card__target">${escapeHtml(target)}</span></span>`
     : "";
-  return `      <a class="card" href="${href}">
+  return `      <a class="card" href="${href}"${gmail}>
         <span class="card__mark card__mark--${escapeHtml(card.icon)}" aria-hidden="true"></span>
         <span class="card__body">
           <span class="card__title">${title}</span>
@@ -195,7 +199,7 @@ ${cards}
 
     <footer class="footer">&copy; ${year} render.com</footer>
   </main>
-<script>${ICON_FALLBACK_SCRIPT}</script>
+<script>${PAGE_SCRIPT}</script>
 </body>
 </html>
 `;

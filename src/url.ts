@@ -36,6 +36,73 @@ export function normalizeMailto(value: string): string {
   return MAILTO + clean(value).slice(MAILTO.length);
 }
 
+const GMAIL_COMPOSE = "https://mail.google.com/mail/?view=cm&fs=1";
+
+// The mailto: headers that Gmail's compose page accepts, and the parameter for each.
+const GMAIL_PARAMS = new Map([
+  ["subject", "su"],
+  ["body", "body"],
+  ["cc", "cc"],
+  ["bcc", "bcc"],
+]);
+
+const PERCENT_ESCAPES = /(?:%[0-9A-Fa-f]{2})+/g;
+
+/**
+ * Decode each run of `%XX` escapes as UTF-8, and keep any other `%` as it is.
+ * `decodeURIComponent` throws on `100%`. Python's `unquote` keeps it.
+ */
+function percentDecode(value: string): string {
+  return value.replace(PERCENT_ESCAPES, (run) => {
+    const bytes = Uint8Array.from(run.slice(1).split("%"), (hex) => Number.parseInt(hex, 16));
+    return new TextDecoder().decode(bytes);
+  });
+}
+
+/**
+ * Encode all but letters, digits, `-_.~@,`, the same as Python's
+ * `quote(value, safe="@,")`. `encodeURIComponent` also keeps `!'()*`.
+ */
+function percentEncode(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%40/g, "@")
+    .replace(/%2C/g, ",");
+}
+
+/**
+ * The Gmail web compose URL for a mailto: URL.
+ *
+ * The recipients and any `to` headers go in `to`. The subject, body, cc, and bcc
+ * headers go in their Gmail parameters, and other headers are dropped. Each value
+ * is decoded and encoded again, so a raw space, `#`, `&`, or `+` from the Notion
+ * cell cannot change how Gmail reads the query string.
+ */
+export function gmailComposeUrl(mailto: string): string {
+  const rest = normalizeMailto(mailto).slice(MAILTO.length);
+  const query = rest.indexOf("?");
+  const recipients = query === -1 ? rest : rest.slice(0, query);
+  const headers = query === -1 ? "" : rest.slice(query + 1);
+  const to = [recipients];
+  const params: [string, string][] = [];
+  for (const header of headers.split("&")) {
+    const equals = header.indexOf("=");
+    const name = (equals === -1 ? header : header.slice(0, equals)).toLowerCase();
+    const value = equals === -1 ? "" : header.slice(equals + 1);
+    const param = GMAIL_PARAMS.get(name);
+    if (name === "to") to.push(value);
+    else if (param) params.push([param, value]);
+  }
+  params.unshift(["to", to.filter(Boolean).join(",")]);
+  return (
+    GMAIL_COMPOSE +
+    params
+      .filter(([, value]) => value)
+      .map(([name, value]) => `&${name}=${percentEncode(percentDecode(value))}`)
+      .join("")
+  );
+}
+
 // A scheme and the two slashes that follow it. The test is `://`, not the scheme
 // grammar of RFC 3986, because `render.com` in `render.com:8080/x` also matches that
 // grammar. The `normalize-url` package and a browser address bar make the same test.

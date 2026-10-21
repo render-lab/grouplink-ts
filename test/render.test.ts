@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { escapeHtml, renderPage, safeUrl, type PageModel } from "../src/render.js";
+import { PAGE_SCRIPT } from "../src/styles.js";
 import { ICON_NAMES } from "../src/icons.js";
 
 const model: PageModel = {
@@ -72,7 +73,9 @@ describe("renderPage", () => {
         },
       ],
     });
-    expect(html).toContain('href="mailto:shifra@render.com"');
+    const gmail = "https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=shifra@render.com";
+    expect(html).toContain(`href="mailto:shifra@render.com" data-gmail="${gmail}"`);
+    expect(html).not.toContain('target="_blank"');
     expect(html).toContain('<span class="card__target">mailto:shifra@render.com</span>');
     expect(html).not.toContain('class="card__icon"');
   });
@@ -90,8 +93,29 @@ describe("renderPage", () => {
         },
       ],
     });
-    expect(html).toContain('href="mailto:shifra@render.com?subject=Hi&amp;body=Hello"');
+    const gmail =
+      "https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=shifra@render.com&amp;su=Hi&amp;body=Hello";
+    expect(html).toContain(
+      `href="mailto:shifra@render.com?subject=Hi&amp;body=Hello" data-gmail="${gmail}"`,
+    );
     expect(html).toContain('<span class="card__target">mailto:shifra@render.com</span>');
+  });
+
+  it("gives only email cards a Gmail link", () => {
+    const html = renderPage({
+      ...model,
+      cards: [
+        { title: "Site", url: "https://render.com/", description: "", iconUrl: "", icon: "arrow" },
+      ],
+    });
+    expect(html).not.toContain('data-gmail="');
+  });
+
+  it("swaps in the Gmail link only on a desktop", () => {
+    const html = renderPage(model);
+    expect(html).toContain(`<script>${PAGE_SCRIPT}</script>`);
+    expect(PAGE_SCRIPT).toContain("matchMedia('(hover: hover) and (pointer: fine)')");
+    expect(PAGE_SCRIPT).toContain("a[data-gmail]");
   });
 
   it("labels a mailto: link with no recipient", () => {
